@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LoRa GPS Tracker - BUBT</title>
+
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <!-- Leaflet JS -->
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+    <!-- Font Awesome for Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <style>
+      /* ============================================================
+           RESET & BASE
+           ============================================================ */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #0a0a1a;
+        color: #fff;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* ============================================================
+           HEADER
+           ============================================================ */
+      #header {
+        background: linear-gradient(135deg, #0a1628, #1a2a4a, #0f3460);
+        padding: 10px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 3px solid #e94560;
+        z-index: 1000;
+        position: relative;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .header-left .logo {
+        font-size: 28px;
+        color: #e94560;
+      }
+
+      .header-left h1 {
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      .header-left h1 span {
+        color: #e94560;
+      }
+
+      .header-left .subtitle {
+        font-size: 11px;
+        color: #8899bb;
+        font-weight: 300;
+        letter-spacing: 0.5px;
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .header-right .status {
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 4px;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      .status-dot.online {
+        background: #00ff88;
+        box-shadow: 0 0 12px #00ff88;
+      }
+
+      .status-dot.offline {
+        background: #ff4444;
+        animation: none;
+      }
+
+      .status-dot.stale {
+        background: #ffaa00;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.5;
+          transform: scale(0.8);
+        }
+      }
+
+      .status-text {
+        font-weight: 500;
+      }
+
+      .status-time {
+        color: #8899bb;
+        font-size: 12px;
+      }
+
+      .status-age {
+        font-size: 12px;
+        padding: 2px 10px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .status-age.fresh {
+        color: #00ff88;
+      }
+      .status-age.stale {
+        color: #ffaa00;
+      }
+      .status-age.offline {
+        color: #ff4444;
+      }
+      .status-age.waiting {
+        color: #6688aa;
+      }
+
+      /* ============================================================
+           MAP
+           ============================================================ */
+      #map {
+        height: calc(100vh - 140px);
+        width: 100%;
+        z-index: 1;
+      }
+
+      /* ============================================================
+           INFO PANEL (Map Control)
+           ============================================================ */
+      .info-control {
+        background: rgba(10, 10, 30, 0.92);
+        backdrop-filter: blur(12px);
+        padding: 14px 18px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        min-width: 210px;
+        color: #fff;
+        font-size: 13px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      }
+
+      .info-control .label {
+        color: #6688aa;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 600;
+      }
+
+      .info-control .value {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 3px;
+      }
+
+      .info-control .value.gps-fix {
+        color: #00ff88;
+      }
+
+      .info-control .value.no-fix {
+        color: #ff6b6b;
+      }
+
+      .info-control .divider {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        margin: 6px 0;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px 10px;
+      }
+
+      .info-grid .label {
+        font-size: 9px;
+      }
+      .info-grid .value {
+        font-size: 14px;
+      }
+
+      /* ============================================================
+           FOOTER / UNIVERSITY INFO
+           ============================================================ */
+      #footer {
+        background: linear-gradient(135deg, #0a1628, #0f1a2e);
+        padding: 8px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        z-index: 1000;
+        position: relative;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 12px;
+        color: #6688aa;
+      }
+
+      #footer .university {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      #footer .university .uni-name {
+        color: #aabbdd;
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      #footer .university .dept {
+        color: #8899bb;
+        font-size: 12px;
+      }
+
+      #footer .team {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      #footer .team .team-label {
+        color: #556688;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      #footer .team .member {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: #aabbdd;
+        font-size: 12px;
+      }
+
+      #footer .team .member .role {
+        color: #e94560;
+        font-size: 10px;
+        font-weight: 600;
+      }
+
+      #footer .team .member i {
+        color: #e94560;
+        font-size: 12px;
+      }
+
+      /* ============================================================
+           CUSTOM MARKER
+           ============================================================ */
+      .custom-marker {
+        background: #e94560;
+        width: 22px;
+        height: 22px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: 3px solid #fff;
+        box-shadow: 0 0 25px rgba(233, 69, 96, 0.6);
+        position: relative;
+      }
+
+      .custom-marker::after {
+        content: "";
+        width: 8px;
+        height: 8px;
+        background: #fff;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+      }
+
+      .leaflet-popup-content {
+        color: #1a1a2e;
+        font-size: 13px;
+        min-width: 190px;
+      }
+
+      .leaflet-popup-content strong {
+        color: #e94560;
+      }
+
+      /* ============================================================
+           LOADING OVERLAY
+           ============================================================ */
+      #loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0a0a1a;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        transition: opacity 0.8s ease;
+      }
+
+      #loading.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #loading .spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(233, 69, 96, 0.15);
+        border-top: 3px solid #e94560;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      #loading .loading-text {
+        margin-top: 20px;
+        color: #6688aa;
+        font-size: 14px;
+        letter-spacing: 1px;
+      }
+
+      #loading .loading-sub {
+        color: #445566;
+        font-size: 12px;
+        margin-top: 4px;
+      }
+
+      /* ============================================================
+           RESPONSIVE
+           ============================================================ */
+      @media (max-width: 992px) {
+        #header {
+          padding: 8px 14px;
+        }
+        .header-left h1 {
+          font-size: 16px;
+        }
+        .header-left .subtitle {
+          display: none;
+        }
+        .header-right .status {
+          font-size: 12px;
+          gap: 8px;
+        }
+        #footer {
+          font-size: 11px;
+          padding: 6px 14px;
+        }
+        #footer .team .member {
+          font-size: 11px;
+        }
+        .info-control {
+          min-width: 170px;
+          padding: 10px 14px;
+          font-size: 12px;
+        }
+        #map {
+          height: calc(100vh - 130px);
+        }
+      }
+
+      @media (max-width: 768px) {
+        #header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 4px;
+          padding: 6px 12px;
+        }
+        .header-left {
+          justify-content: center;
+        }
+        .header-left h1 {
+          font-size: 15px;
+        }
+        .header-right {
+          justify-content: center;
+          gap: 10px;
+        }
+        .header-right .status {
+          font-size: 11px;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+        #footer {
+          flex-direction: column;
+          text-align: center;
+          gap: 4px;
+          padding: 6px 12px;
+        }
+        #footer .team {
+          justify-content: center;
+        }
+        .info-control {
+          min-width: 150px;
+          padding: 8px 12px;
+          font-size: 11px;
+        }
+        .info-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        #map {
+          height: calc(100vh - 160px);
+        }
+      }
+
+      @media (max-width: 480px) {
+        .header-left h1 {
+          font-size: 13px;
+        }
+        .header-left .logo {
+          font-size: 20px;
+        }
+        #footer .team .member {
+          font-size: 10px;
+        }
+        #footer .university .uni-name {
+          font-size: 11px;
+        }
+        .info-control .value {
+          font-size: 13px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ============================================================
+    LOADING OVERLAY
+    ============================================================ -->
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Connecting to Firebase...</div>
+      <div class="loading-sub">LoRa GPS Tracking System</div>
+    </div>
+
+    <!-- ============================================================
+    HEADER
+    ============================================================ -->
+    <div id="header">
+      <div class="header-left">
+        <span class="logo"><i class="fas fa-satellite-dish"></i></span>
+        <div>
+          <h1>LoRa <span>GPS Tracker</span></h1>
+          <div class="subtitle">Real-Time Vehicle Tracking System</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="status">
+          <span>
+            <span class="status-dot" id="statusDot"></span>
+            <span class="status-text" id="statusText">Connecting...</span>
+          </span>
+          <span class="status-time" id="lastUpdate">Last: --:--:--</span>
+          <span class="status-age" id="dataAge">⏳ Waiting...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+    MAP
+    ============================================================ -->
+    <div id="map"></div>
+
+    <!-- ============================================================
+    FOOTER - UNIVERSITY & TEAM
+    ============================================================ -->
+    <div id="footer">
+      <div class="university">
+        <span><i class="fas fa-university" style="color: #e94560"></i></span>
+        <span class="uni-name"
+          >Bangladesh University of Business and Technology (BUBT)</span
+        >
+        <span class="dept">| Department of Computer Science & Engineering</span>
+        <span class="dept">| Faculty: Sudipto Ghosh</span>
+      </div>
+      <div class="team">
+        <span class="team-label"><i class="fas fa-users"></i> Team</span>
+        <span class="member">
+          <i class="fas fa-crown"></i>
+          <span class="role">Lead:</span> Md. Mafuz Alam
+        </span>
+        <span class="member">
+          <i class="fas fa-user"></i>
+          <span class="role">Member:</span> Md.Mehedi Hasan
+        </span>
+        <span class="member">
+          <i class="fas fa-user"></i>
+          <span class="role">Member:</span> Sumaya Alam Raka
+        </span>
+        <span class="member">
+          <i class="fas fa-user"></i>
+          <span class="role">Member:</span> Sajidul Islam
+        </span>
+      </div>
+    </div>
+
+    <!-- ============================================================
+    JAVASCRIPT
+    ============================================================ -->
+    <script>
+      // ============================================================
+      // FIREBASE CONFIGURATION
+      // ============================================================
+      const firebaseConfig = {
+        apiKey: "AIzaSyCJ36lEQLb8y9EIXWT0K_1jB0P93rroxO8",
+        authDomain: "lora-location-tracker.firebaseapp.com",
+        databaseURL:
+          "https://lora-location-tracker-default-rtdb.asia-southeast1.firebasedatabase.app/",
+        projectId: "lora-location-tracker",
+        storageBucket: "lora-location-tracker.firebasestorage.app",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID",
+      };
+
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      const database = firebase.database();
+
+      // ============================================================
+      // MAP INITIALIZATION
+      // ============================================================
+
+      const DEFAULT_LAT = 23.7957;
+      const DEFAULT_LNG = 90.2696;
+
+      const map = L.map("map", {
+        center: [DEFAULT_LAT, DEFAULT_LNG],
+        zoom: 16,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      // OpenStreetMap tiles
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      // ============================================================
+      // CUSTOM MARKER
+      // ============================================================
+
+      const vehicleIcon = L.divIcon({
+        className: "custom-marker",
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor: [0, -24],
+      });
+
+      let vehicleMarker = null;
+      let vehicleCircle = null;
+      let pathPolyline = [];
+      let pathLine = null;
+      let lastData = null;
+      let dataReceived = false;
+      let mapReady = false;
+
+      // Wait for map to be ready
+      map.whenReady(function () {
+        mapReady = true;
+        console.log("✅ Map is ready");
+      });
+
+      // ============================================================
+      // INFO CONTROL
+      // ============================================================
+
+      const InfoControl = L.Control.extend({
+        onAdd: function () {
+          const div = L.DomUtil.create("div", "info-control");
+          div.id = "infoPanel";
+          div.innerHTML = `
+                    <div class="label">📍 Current Location</div>
+                    <div class="value" id="locValue">Waiting for data...</div>
+                    <div class="divider"></div>
+                    <div class="label">📡 GPS Status</div>
+                    <div class="value" id="gpsStatus">No Fix</div>
+                    <div class="divider"></div>
+                    <div class="info-grid">
+                        <div>
+                            <div class="label">🛰️ Satellites</div>
+                            <div class="value" id="satValue">--</div>
+                        </div>
+                        <div>
+                            <div class="label">📶 RSSI</div>
+                            <div class="value" id="rssiValue">--</div>
+                        </div>
+                        <div>
+                            <div class="label">⬆ Altitude</div>
+                            <div class="value" id="altValue">-- m</div>
+                        </div>
+                        <div>
+                            <div class="label">🏎️ Speed</div>
+                            <div class="value" id="speedValue">-- km/h</div>
+                        </div>
+                    </div>
+                `;
+          return div;
+        },
+      });
+
+      map.addControl(new InfoControl({ position: "bottomright" }));
+
+      // ============================================================
+      // UI UPDATE FUNCTIONS
+      // ============================================================
+
+      function updateInfoPanel(data) {
+        const locValue = document.getElementById("locValue");
+        const gpsStatus = document.getElementById("gpsStatus");
+        const satValue = document.getElementById("satValue");
+        const rssiValue = document.getElementById("rssiValue");
+        const altValue = document.getElementById("altValue");
+        const speedValue = document.getElementById("speedValue");
+
+        if (data && data.gps_valid && data.latitude && data.longitude) {
+          const lat = data.latitude || 0;
+          const lng = data.longitude || 0;
+          locValue.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          gpsStatus.textContent = "✅ Fixed";
+          gpsStatus.className = "value gps-fix";
+          satValue.textContent = data.satellites || "--";
+          rssiValue.textContent = data.rssi ? `${data.rssi} dBm` : "--";
+          altValue.textContent = data.altitude
+            ? `${data.altitude.toFixed(1)} m`
+            : "-- m";
+          speedValue.textContent = data.speed
+            ? `${data.speed.toFixed(1)} km/h`
+            : "-- km/h";
+        } else {
+          locValue.textContent = "No GPS Fix";
+          gpsStatus.textContent = "❌ No Fix";
+          gpsStatus.className = "value no-fix";
+          satValue.textContent = "--";
+          rssiValue.textContent = "--";
+          altValue.textContent = "-- m";
+          speedValue.textContent = "-- km/h";
+        }
+      }
+
+      function updateHeaderStatus(connected, timestamp, timeString) {
+        const dot = document.getElementById("statusDot");
+        const text = document.getElementById("statusText");
+        const update = document.getElementById("lastUpdate");
+        const age = document.getElementById("dataAge");
+
+        // If we have a time_string from Firebase, use it
+        if (timeString && timeString !== "Time not synced") {
+          update.textContent = `Last: ${timeString}`;
+        }
+
+        if (connected && timestamp && timestamp > 0) {
+          const now = Date.now();
+          const elapsed = (now - timestamp) / 1000;
+
+          // Format the time
+          const d = new Date(timestamp);
+          const timeStr = d.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+
+          // Only update if no time_string from Firebase
+          if (!timeString || timeString === "Time not synced") {
+            update.textContent = `Last: ${timeStr}`;
+          }
+
+          if (elapsed < 30) {
+            dot.className = "status-dot online";
+            text.textContent = "Online";
+            age.className = "status-age fresh";
+            age.textContent = `🟢 ${elapsed.toFixed(0)}s ago`;
+          } else if (elapsed < 60) {
+            dot.className = "status-dot stale";
+            text.textContent = "Stale";
+            age.className = "status-age stale";
+            age.textContent = `🟡 ${elapsed.toFixed(0)}s ago`;
+          } else {
+            dot.className = "status-dot offline";
+            text.textContent = "Offline";
+            age.className = "status-age offline";
+            age.textContent = `🔴 ${Math.floor(elapsed / 60)}m ${Math.floor(elapsed % 60)}s ago`;
+          }
+        } else if (connected && timestamp && timestamp < 0) {
+          // Negative timestamp - use time_string from Firebase
+          dot.className = "status-dot online";
+          text.textContent = "Online";
+          age.className = "status-age fresh";
+          age.textContent = "🟢 Live";
+          if (timeString && timeString !== "Time not synced") {
+            update.textContent = `Last: ${timeString}`;
+          }
+        } else if (connected) {
+          dot.className = "status-dot online";
+          text.textContent = "Connected";
+          update.textContent = "Last: --:--:--";
+          age.className = "status-age waiting";
+          age.textContent = "⏳ Waiting for data...";
+        } else {
+          dot.className = "status-dot offline";
+          text.textContent = "Disconnected";
+          update.textContent = "Last: --:--:--";
+          age.className = "status-age offline";
+          age.textContent = "❌ No connection";
+        }
+      }
+
+      // ============================================================
+      // MAP UPDATE (FIXED - with null checks)
+      // ============================================================
+
+      function updateMap(data) {
+        if (!data || !data.gps_valid || !data.latitude || !data.longitude) {
+          return;
+        }
+
+        if (!mapReady) {
+          console.log("⏳ Map not ready yet, waiting...");
+          return;
+        }
+
+        try {
+          const lat = data.latitude;
+          const lng = data.longitude;
+          const accuracy = data.accuracy || 15;
+
+          if (!vehicleMarker) {
+            vehicleMarker = L.marker([lat, lng], {
+              icon: vehicleIcon,
+              draggable: false,
+            }).addTo(map);
+
+            vehicleMarker.bindPopup(`
+                    <strong>🚗 Vehicle</strong><br>
+                    Lat: ${lat.toFixed(6)}<br>
+                    Lng: ${lng.toFixed(6)}<br>
+                    Alt: ${data.altitude ? data.altitude.toFixed(1) + "m" : "N/A"}<br>
+                    Speed: ${data.speed ? data.speed.toFixed(1) + " km/h" : "N/A"}<br>
+                    Satellites: ${data.satellites || "N/A"}<br>
+                    RSSI: ${data.rssi || "N/A"} dBm<br>
+                    Time: ${data.time_string || "N/A"}
+                `);
+          } else {
+            vehicleMarker.setLatLng([lat, lng]);
+            vehicleMarker.setPopupContent(`
+                    <strong>🚗 Vehicle</strong><br>
+                    Lat: ${lat.toFixed(6)}<br>
+                    Lng: ${lng.toFixed(6)}<br>
+                    Alt: ${data.altitude ? data.altitude.toFixed(1) + "m" : "N/A"}<br>
+                    Speed: ${data.speed ? data.speed.toFixed(1) + " km/h" : "N/A"}<br>
+                    Satellites: ${data.satellites || "N/A"}<br>
+                    RSSI: ${data.rssi || "N/A"} dBm<br>
+                    Time: ${data.time_string || "N/A"}
+                `);
+          }
+
+          if (!vehicleCircle) {
+            vehicleCircle = L.circle([lat, lng], {
+              radius: accuracy,
+              color: "#e94560",
+              fillColor: "#e94560",
+              fillOpacity: 0.12,
+              weight: 2,
+            }).addTo(map);
+          } else {
+            vehicleCircle.setLatLng([lat, lng]);
+            vehicleCircle.setRadius(accuracy);
+          }
+
+          if (
+            pathPolyline.length === 0 ||
+            Math.abs(pathPolyline[pathPolyline.length - 1][0] - lat) > 0.00001 ||
+            Math.abs(pathPolyline[pathPolyline.length - 1][1] - lng) > 0.00001
+          ) {
+            pathPolyline.push([lat, lng]);
+            if (pathPolyline.length > 200) {
+              pathPolyline.shift();
+            }
+          }
+
+          if (!pathLine) {
+            pathLine = L.polyline(pathPolyline, {
+              color: "#e94560",
+              weight: 3,
+              opacity: 0.7,
+            }).addTo(map);
+          } else {
+            pathLine.setLatLngs(pathPolyline);
+          }
+
+          // FIXED: Check if map._dragging exists before accessing _enabled
+          if (map._dragging && !map._dragging._enabled) {
+            // Don't center if user is dragging
+          } else if (map._dragging && map._dragging._enabled) {
+            // Don't center if user is dragging
+          } else {
+            // Safe to center
+            map.setView([lat, lng], map.getZoom(), {
+              animate: true,
+              duration: 0.5,
+            });
+          }
+
+          updateInfoPanel(data);
+
+          if (vehicleMarker && !vehicleMarker._popup._isOpen && !dataReceived) {
+            setTimeout(() => {
+              vehicleMarker.openPopup();
+            }, 500);
+            dataReceived = true;
+          }
+        } catch (error) {
+          console.warn("Map update error:", error);
+        }
+      }
+
+      // ============================================================
+      // FIREBASE LISTENER
+      // ============================================================
+
+      function listenToFirebase() {
+        const vehicleRef = database.ref("vehicles/vehicle_01");
+
+        vehicleRef.on(
+          "value",
+          (snapshot) => {
+            const data = snapshot.val();
+
+            document.getElementById("loading").classList.add("hidden");
+
+            if (data) {
+              lastData = data;
+
+              // Get timestamp - handle negative values
+              let timestamp = data.last_update;
+              let timeString = data.time_string || null;
+
+              // If timestamp is negative or invalid, try to use time_string
+              if (typeof timestamp === "number" && timestamp < 0) {
+                // Negative timestamp - use time_string if available
+                timestamp = null;
+              } else if (typeof timestamp === "number") {
+                // Positive timestamp - use as is
+                timestamp = timestamp;
+              } else {
+                timestamp = null;
+              }
+
+              // If we have a valid timestamp, convert to milliseconds if needed
+              if (timestamp && typeof timestamp === "number") {
+                // If timestamp is in seconds (10 digits), convert to milliseconds
+                if (timestamp < 10000000000) {
+                  timestamp = timestamp * 1000;
+                }
+              }
+
+              data._timestamp = timestamp;
+
+              // Update map with data
+              updateMap(data);
+
+              // Update header with timestamp and time_string
+              updateHeaderStatus(true, timestamp, timeString);
+            } else {
+              updateHeaderStatus(true, null, null);
+              updateInfoPanel(null);
+            }
+          },
+          (error) => {
+            console.error("Firebase read error:", error);
+            document.getElementById("loading").classList.add("hidden");
+            updateHeaderStatus(false, null, null);
+          },
+        );
+      }
+
+      // ============================================================
+      // CONNECTION CHECK
+      // ============================================================
+
+      function checkConnection() {
+        const connectedRef = database.ref(".info/connected");
+        connectedRef.on("value", (snap) => {
+          if (snap.val() === true) {
+            console.log("✅ Connected to Firebase");
+            document.getElementById("statusText").textContent = "Connected";
+          } else {
+            console.log("❌ Disconnected from Firebase");
+            document.getElementById("statusText").textContent = "Disconnected";
+            document.getElementById("statusDot").className =
+              "status-dot offline";
+          }
+        });
+      }
+
+      // ============================================================
+      // MAP CONTROLS
+      // ============================================================
+
+      // Center on Vehicle
+      const centerControl = L.Control.extend({
+        onAdd: function () {
+          const btn = L.DomUtil.create("button", "leaflet-control-zoom");
+          btn.innerHTML = "📍";
+          btn.style.fontSize = "20px";
+          btn.style.padding = "6px 10px";
+          btn.style.cursor = "pointer";
+          btn.style.background = "#fff";
+          btn.style.border = "2px solid rgba(0,0,0,0.2)";
+          btn.style.borderRadius = "4px";
+          btn.title = "Center on Vehicle";
+
+          btn.onclick = function () {
+            if (
+              lastData &&
+              lastData.gps_valid &&
+              lastData.latitude &&
+              lastData.longitude
+            ) {
+              map.flyTo([lastData.latitude, lastData.longitude], 18, {
+                animate: true,
+                duration: 1.5,
+              });
+              if (vehicleMarker) {
+                vehicleMarker.openPopup();
+              }
+            } else {
+              alert("No GPS data available yet.");
+            }
+          };
+
+          return btn;
+        },
+      });
+
+      map.addControl(new centerControl({ position: "topleft" }));
+
+      // Reset View
+      const resetControl = L.Control.extend({
+        onAdd: function () {
+          const btn = L.DomUtil.create("button", "leaflet-control-zoom");
+          btn.innerHTML = "🏠";
+          btn.style.fontSize = "20px";
+          btn.style.padding = "6px 10px";
+          btn.style.cursor = "pointer";
+          btn.style.background = "#fff";
+          btn.style.border = "2px solid rgba(0,0,0,0.2)";
+          btn.style.borderRadius = "4px";
+          btn.title = "Reset View";
+
+          btn.onclick = function () {
+            map.flyTo([DEFAULT_LAT, DEFAULT_LNG], 14, {
+              animate: true,
+              duration: 1.5,
+            });
+          };
+
+          return btn;
+        },
+      });
+
+      map.addControl(new resetControl({ position: "topleft" }));
+
+      // ============================================================
+      // START
+      // ============================================================
+
+      checkConnection();
+      listenToFirebase();
+
+      setInterval(() => {
+        if (lastData && lastData._timestamp && lastData._timestamp > 0) {
+          const now = Date.now();
+          const elapsed = (now - lastData._timestamp) / 1000;
+          if (elapsed > 60) {
+            document.getElementById("statusDot").className =
+              "status-dot offline";
+            document.getElementById("statusText").textContent = "Stale Data";
+          }
+        }
+      }, 10000);
+
+      console.log("🚗 LoRa GPS Tracker started!");
+      console.log("🏫 Bangladesh University of Business and Technology (BUBT)");
+      console.log("📡 Listening to Firebase: /vehicles/vehicle_01");
+    </script>
+  </body>
+</html>
